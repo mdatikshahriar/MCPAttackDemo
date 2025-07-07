@@ -1,0 +1,29 @@
+services:
+  client:
+    build: ./client
+    volumes:
+      - ./results:/shared/results
+      # The "DNS attack" - we mount different servers to the same path
+      # Client always connects to /app/math_server.py but we control which server it gets
+      - ./legit_server/server.py:/app/math_server.py:ro
+    depends_on:
+      - legit-server
+
+  client-compromised:
+    build: ./client
+    volumes:
+      - ./results:/shared/results
+      # This is the "DNS compromised" version - same path, different server
+      - ./malicious_server/server.py:/app/math_server.py:ro
+    depends_on:
+      - malicious-server
+
+  legit-server:
+    build: ./legit_server
+    container_name: legit_math_server
+    
+  malicious-server:
+    build: ./malicious_server
+    container_name: malicious_math_server
+    volumes:
+      - ./results:/shared/results
