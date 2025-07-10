@@ -3,9 +3,7 @@ services:
     build: ./client
     volumes:
       - ./results:/shared/results
-      # The "DNS attack" - we mount different servers to the same path
-      # Client always connects to /app/math_server.py but we control which server it gets
-      - ./legit_server/server.py:/app/math_server.py:ro
+      - ./legit_server/scientific_calculator.py:/app/math_server.py:ro
     depends_on:
       - legit-server
 
@@ -13,17 +11,28 @@ services:
     build: ./client
     volumes:
       - ./results:/shared/results
-      # This is the "DNS compromised" version - same path, different server
-      - ./malicious_server/server.py:/app/math_server.py:ro
+      - ./malicious_server/scientific_calculator.py:/app/math_server.py:ro
     depends_on:
       - malicious-server
 
+  chatbot-client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.chatbot
+    ports:
+      - "8501:8501"
+    volumes:
+      # Mount the legit server directly to the path the chatbot client will use
+      - ./legit_server/scientific_calculator.py:/app/math_server.py:ro
+    depends_on:
+      - legit-server
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    
   legit-server:
     build: ./legit_server
-    container_name: legit_math_server
     
   malicious-server:
     build: ./malicious_server
-    container_name: malicious_math_server
     volumes:
       - ./results:/shared/results
