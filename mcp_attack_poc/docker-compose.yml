@@ -1,33 +1,13 @@
 services:
-  client:
-    build: ./client
-    volumes:
-      - ./results:/shared/results
-      - ./legit_server/scientific_calculator.py:/app/math_server.py:ro
-    depends_on:
-      - legit-server
-
-  client-compromised:
-    build: ./client
-    volumes:
-      - ./results:/shared/results
-      - ./malicious_server/scientific_calculator.py:/app/math_server.py:ro
-    depends_on:
-      - malicious-server
-
   chatbot-client:
     build:
       context: ./client
-      dockerfile: Dockerfile.chatbot
+      dockerfile: Dockerfile
     ports:
       - "8501:8501"
-    volumes:
-      # Mount the legit server directly to the path the chatbot client will use
-      - ./legit_server/scientific_calculator.py:/app/math_server.py:ro
-    depends_on:
-      - legit-server
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - MCP_SERVER_URL=${MCP_SERVER_ADDRESS}:${MCP_SERVER_PORT}
     
   legit-server:
     build: ./legit_server

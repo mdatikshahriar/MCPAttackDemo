@@ -4,79 +4,25 @@ import asyncio
 import logging
 import os
 import re
-import aiohttp
 from typing import Dict, Any, List, Optional, Tuple
+import aiohttp
 import time
-from fastmcp import Client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- Updated MCP Client Class ---
+# --- MCP Client Class ---
 class MCPClient:
     def __init__(self, server_url: str = None):
-        # For MCP, we use stdio or SSE transport instead of HTTP
         self.server_url = server_url or os.getenv("MCP_SERVER_URL", "http://math-calculator.local:5234")
-        self.session = None
         self.available_tools = []
         self.server_status = "Unknown"
         self.last_health_check = 0
-        self._client_session = None
         
-    async def _create_mcp_session(self):
-        """Create MCP client session using FastMCP Client."""
-        try:
-            # Create FastMCP client
-            self._client_session = Client(self.server_url)
-            self.session = await self._client_session.__aenter__()
-            
-            # Test connection
-            await self.session.ping()
-            
-            logger.info("✅ FastMCP session created successfully")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to create FastMCP session: {e}")
-            return await self._initialize_http_fallback()
-    
-    async def _initialize_http_fallback(self):
-        """Fallback to HTTP-based communication if MCP transport fails."""
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{self.server_url}/health",
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
-                    if response.status == 200:
-                        self.server_status = "Healthy (HTTP Fallback)"
-                        logger.info("✅ Using HTTP fallback for MCP communication")
-                        return True
-                    else:
-                        return False
-        except Exception as e:
-            logger.error(f"❌ HTTP fallback failed: {e}")
-            return False
-    
     async def check_server_health(self) -> Dict[str, Any]:
         """Check if the MCP server is healthy and responsive."""
         try:
-            if self.session:
-                # Use MCP protocol to check health
-                try:
-                    # Try to list tools as a health check
-                    result = await self.session.list_tools()
-                    self.server_status = "Healthy (MCP)"
-                    self.last_health_check = time.time()
-                    return {"success": True, "status": "MCP server healthy"}
-                except Exception as e:
-                    logger.warning(f"MCP health check failed, trying HTTP: {e}")
-                    # Fall back to HTTP check
-                    pass
-            
-            # HTTP fallback health check
-            import aiohttp
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     f"{self.server_url}/health",
@@ -84,9 +30,9 @@ class MCPClient:
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
-                        self.server_status = "Healthy (HTTP)"
+                        self.server_status = "Healthy"
                         self.last_health_check = time.time()
-                        logger.info(f"✅ HTTP health check passed: {result}")
+                        logger.info(f"✅ MCP Server health check passed: {result}")
                         return {"success": True, "status": result}
                     else:
                         self.server_status = "Unhealthy"
@@ -100,28 +46,6 @@ class MCPClient:
     async def fetch_available_tools(self) -> Dict[str, Any]:
         """Fetch the list of available tools from the MCP server."""
         try:
-            if self.session:
-                # Use FastMCP client to list tools
-                try:
-                    tools_result = await self.session.list_tools()
-                    tools = []
-                    for tool in tools_result:
-                        tools.append({
-                            "name": tool.name,
-                            "description": tool.description,
-                            "inputSchema": tool.inputSchema.model_dump() if hasattr(tool, 'inputSchema') else {}
-                        })
-                    
-                    self.available_tools = tools
-                    logger.info(f"📊 Fetched {len(self.available_tools)} tools via FastMCP")
-                    return {"success": True, "tools": self.available_tools}
-                except Exception as e:
-                    logger.warning(f"FastMCP tool listing failed, trying HTTP: {e}")
-                    # Fall back to HTTP
-                    pass
-            
-            # HTTP fallback
-            import aiohttp
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     f"{self.server_url}/tools",
@@ -131,7 +55,7 @@ class MCPClient:
                         result = await response.json()
                         if result.get("success"):
                             self.available_tools = result.get("tools", [])
-                            logger.info(f"📊 Fetched {len(self.available_tools)} tools via HTTP")
+                            logger.info(f"📊 Fetched {len(self.available_tools)} tools from server")
                             return {"success": True, "tools": self.available_tools}
                         else:
                             return {"success": False, "error": result.get("error", "Unknown error")}
@@ -145,32 +69,12 @@ class MCPClient:
     async def call_tool(self, tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Call a specific tool on the MCP server."""
         try:
-            if self.session:
-                # Use FastMCP client to call tool
-                try:
-                    logger.info(f"🧮 Calling FastMCP tool '{tool_name}' with params: {params}")
-                    
-                    result = await self.session.call_tool(tool_name, params)
-                    
-                    # Extract result from FastMCP response
-                    if result and len(result) > 0:
-                        return {"success": True, "result": result[0].text}
-                    else:
-                        return {"success": False, "error": "No result returned"}
-                        
-                except Exception as e:
-                    logger.warning(f"FastMCP tool call failed, trying HTTP: {e}")
-                    # Fall back to HTTP
-                    pass
-            
-            # HTTP fallback
-            import aiohttp
             payload = {
                 "tool": tool_name,
-                "arguments": params
+                "params": params
             }
             
-            logger.info(f"🧮 Calling HTTP tool '{tool_name}' with params: {params}")
+            logger.info(f"🧮 Calling tool '{tool_name}' with params: {params}")
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -192,13 +96,7 @@ class MCPClient:
             return {"success": False, "error": str(e)}
     
     async def initialize(self) -> bool:
-        """Initialize the MCP client by creating session and fetching tools."""
-        # Try to create MCP session first
-        if await self._create_mcp_session():
-            logger.info("✅ MCP session created successfully")
-        else:
-            logger.warning("⚠️ MCP session creation failed, using HTTP fallback")
-        
+        """Initialize the MCP client by checking health and fetching tools."""
         # Check server health
         health_result = await self.check_server_health()
         if not health_result["success"]:
@@ -213,14 +111,6 @@ class MCPClient:
         
         logger.info(f"✅ MCP Client initialized successfully with {len(self.available_tools)} tools")
         return True
-    
-    async def cleanup(self):
-        """Clean up MCP client resources."""
-        if self._client_session:
-            try:
-                await self._client_session.__aexit__(None, None, None)
-            except Exception as e:
-                logger.error(f"Error cleaning up MCP session: {e}")
     
     def get_tool_by_name(self, tool_name: str) -> Optional[Dict]:
         """Get tool details by name."""
@@ -259,6 +149,7 @@ class MCPClient:
         
         # Remove empty categories
         return {k: v for k, v in categories.items() if v}
+
 
 # --- Helper Functions ---
 def extract_numbers_from_query(query: str) -> List[float]:
@@ -524,7 +415,7 @@ def get_openai_client():
         return None, f"Error initializing OpenAI client: {str(e)}"
 
 def main():
-    """Main Streamlit application with updated MCP integration."""
+    """Main Streamlit application."""
     st.set_page_config(page_title="MCP Scientific Calculator", page_icon="🧮")
     st.title("🧮 MCP Scientific Calculator Chatbot")
 
@@ -540,23 +431,6 @@ def main():
         st.info("Please set the `OPENROUTER_API_KEY` environment variable.")
         st.stop()
 
-    # Cleanup on app shutdown
-    if hasattr(st.session_state, 'mcp_client') and st.session_state.mcp_client:
-        # Register cleanup function
-        def cleanup_mcp():
-            if st.session_state.mcp_client:
-                try:
-                    asyncio.run(st.session_state.mcp_client.cleanup())
-                except Exception as e:
-                    logger.error(f"Error during cleanup: {e}")
-        
-        # This will be called when the session ends
-        st.session_state.setdefault('cleanup_registered', False)
-        if not st.session_state.cleanup_registered:
-            import atexit
-            atexit.register(cleanup_mcp)
-            st.session_state.cleanup_registered = True
-
     # Server status in sidebar
     with st.sidebar:
         st.header("🔌 Server Status")
@@ -570,13 +444,7 @@ def main():
                     st.error(f"❌ Server issue: {health_result['error']}")
         
         # Display current server status
-        status_color = {
-            "Healthy (MCP)": "🟢", 
-            "Healthy (HTTP)": "🟡", 
-            "Healthy (HTTP Fallback)": "🟡",
-            "Unhealthy": "🟠", 
-            "Unreachable": "🔴"
-        }.get(st.session_state.mcp_client.server_status, "⚪")
+        status_color = {"Healthy": "🟢", "Unhealthy": "🟡", "Unreachable": "🔴"}.get(st.session_state.mcp_client.server_status, "⚪")
         st.write(f"Status: {status_color} {st.session_state.mcp_client.server_status}")
         st.write(f"Server URL: `{st.session_state.mcp_client.server_url}`")
         
@@ -718,6 +586,7 @@ def main():
         - "Calculate 10!"
         - "Find the combination of 10 choose 3"
         - "What is the natural log of 100?"
+        - "Is 97 prime?"
         """)
 
 if __name__ == "__main__":

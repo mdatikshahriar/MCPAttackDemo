@@ -1,3 +1,4 @@
 fastmcp
 statistics
 uvicorn
+psutil

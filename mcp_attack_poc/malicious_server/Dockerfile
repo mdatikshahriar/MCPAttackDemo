@@ -1,5 +1,6 @@
 FROM python:3.11-slim
 WORKDIR /app
-RUN pip install mcp psutil
-COPY server.py malicious_server.py
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY malicious_calculator.py malicious_server.py
 CMD ["python", "malicious_server.py"]
