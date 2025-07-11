@@ -10,195 +10,236 @@ This repository contains a **controlled proof-of-concept** demonstrating how DNS
 The Model Context Protocol (MCP) is a standardized protocol for AI agents to interact with external services and tools. Clients connect to MCP servers to access various capabilities like file operations, database queries, or API calls.
 
 ### The Vulnerability
-This PoC demonstrates a **server impersonation attack** where:
+This PoC demonstrates a **DNS hijacking attack** where:
 
-1. **Client Trust**: MCP clients typically trust server endpoints based on DNS resolution
-2. **DNS Compromise**: An attacker compromises DNS resolution (enterprise DNS, local network, etc.)
-3. **Transparent Redirection**: Client requests are redirected to a malicious server
-4. **Data Exfiltration**: The malicious server can intercept and exfiltrate sensitive data
-5. **Maintained Facade**: The attack remains invisible to the client
+1. **Initial Trust**: Client establishes legitimate connection to trusted MCP server
+2. **DNS Compromise**: Attacker gains control over DNS resolution (hosts file manipulation)
+3. **Transparent Redirection**: Client requests are silently redirected to malicious server
+4. **Continued Interaction**: User unknowingly interacts with malicious server
+5. **Data Exfiltration**: Malicious server intercepts and logs all sensitive interactions
+6. **Maintained Facade**: Attack remains completely invisible to the user
 
 ### Attack Scenario
 ```
-Normal Flow:
-Client → DNS Resolution → Legitimate MCP Server → Safe Response
+Phase 1 - Normal Operation:
+User → Chatbot Client → DNS (math-calculator.local) → Legitimate MCP Server
 
-Compromised Flow:
-Client → Compromised DNS → Malicious MCP Server → Data Exfiltration
+Phase 2 - DNS Hijacking:
+User → Chatbot Client → Compromised DNS → Malicious MCP Server
+                                      ↓
+                                 Data Exfiltration
 ```
 
 ## 🏗️ **Technical Architecture**
 
 ### Components
 
-1. **Legitimate Server** (`legit_server/`)
+1. **Chatbot Client** (`client/`)
+   - Interactive web interface using Streamlit
+   - Connects to `math-calculator.local` server
+   - Provides user-friendly chat interface for MCP interactions
+   - Completely unaware of server legitimacy
+
+2. **Legitimate Server** (`legit_server/`)
    - Implements standard MCP math service
-   - Provides legitimate `add` and `multiply` tool functionality
-   - Logs normal operations with structured logging
+   - Provides legitimate calculator functionality
+   - Runs on Docker internal network
+   - Logs normal operations
 
-2. **Malicious Server** (`malicious_server/`)
-   - **Impersonates** the legitimate server (identical interface)
-   - **Intercepts** all client requests and responses
-   - **Exfiltrates** comprehensive system and interaction data
-   - **Maintains facade** by returning expected results
-   - **Advanced reconnaissance** including system fingerprinting
+3. **Malicious Server** (`malicious_server/`)
+   - **Perfect impersonation** of legitimate server
+   - **Identical interface** and functionality
+   - **Silent data exfiltration** to results directory
+   - **Transparent operation** - returns expected results
+   - **Advanced logging** of all user interactions
 
-3. **Client** (`client/`)
-   - Unaware of server legitimacy
-   - Always attempts to connect to "trusted" math-service
-   - Sends potentially sensitive computational data
-   - Cannot detect the impersonation
-
-### Docker Architecture
+### Attack Flow Architecture
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│     Client      │    │  Legitimate      │    │   Malicious     │
-│                 │    │  Server          │    │   Server        │
-│ Always connects │    │                  │    │                 │
-│ to "trusted"    │◄──►│ /app/math_server │    │ /app/math_server│
-│ math-service    │    │                  │    │                 │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                                               │
-         └─────────────► Volume Mount Controls ◄────────┘
-                        Which Server Gets Loaded
+│   User Browser  │    │   Chatbot Client │    │  DNS Resolution │
+│                 │    │  (Streamlit)     │    │                 │
+│ Interacts with  │◄──►│                  │◄──►│ math-calculator │
+│ chat interface  │    │ Connects to      │    │ .local          │
+└─────────────────┘    │ MCP server       │    └─────────────────┘
+                       └──────────────────┘             │
+                                                        │
+                    ┌─────────────────┐                 │
+                    │  Legitimate     │◄────────────────┘
+                    │  MCP Server     │        OR
+                    │  (Phase 1)      │                 │
+                    └─────────────────┘                 │
+                                                        │
+                    ┌─────────────────┐                 │
+                    │  Malicious      │◄────────────────┘
+                    │  MCP Server     │
+                    │  (Phase 2)      │
+                    │  + Data Export  │
+                    └─────────────────┘
 ```
 
-## 🚀 **Quick Start**
+## 🚀 **Quick Start - Automated Demo**
+
+### One-Command Full Demo
+For the complete automated attack demonstration:
+
+```bash
+# Make the demo script executable
+chmod +x run_demo.sh
+
+# Run the complete automated demo (requires admin privileges)
+sudo ./run_demo.sh
+```
+
+**What the automated demo does:**
+- ✅ Checks all prerequisites automatically
+- ✅ Starts legitimate server and sets up DNS
+- ✅ Launches chatbot interface in your browser
+- ✅ Guides you through legitimate interactions
+- ✅ Executes DNS hijacking attack transparently
+- ✅ Shows attack results and data exfiltration
+- ✅ Provides comprehensive security analysis
+- ✅ Cleans up environment when complete
+
+**Perfect for:**
+- Security researchers and students
+- Cybersecurity training and education
+- Quick vulnerability demonstrations
+- Understanding DNS hijacking attacks
+
+## 🔧 **Manual Step-by-Step Attack Demo**
 
 ### Prerequisites
 - Docker & Docker Compose installed
-- Unix-like environment (Linux/macOS/WSL)
-- 2GB+ available RAM for containers
+- Administrator/sudo privileges (for hosts file modification)
+- Web browser for interacting with chatbot
+- 2GB+ available RAM
 
-### One-Command Demo
+### Environment Configuration
+
+Create `.env` file from `example.env`:
 ```bash
-cd mcp_attack_poc
+OPENROUTER_API_KEY=your_api_key_here
+MCP_SERVER_ADDRESS=http://math-calculator.local
+MCP_SERVER_PORT=5234
+```
+
+## 🎯 **Demo Options**
+
+### Option 1: Automated Demo (Recommended)
+Use the automated script for the complete guided experience:
+
+```bash
 chmod +x run_demo.sh
-./run_demo.sh
+sudo ./run_demo.sh
 ```
 
-### Manual Step-by-Step
-```bash
-# 1. Build containers
-docker-compose build
+**Features:**
+- Complete automation of all attack phases
+- Interactive prompts and guidance
+- Automatic browser launch
+- Comprehensive results analysis
+- Clean environment setup and teardown
 
-# 2. Clean previous results
-rm -rf results/* && mkdir -p results
+### Option 2: Manual Step-by-Step
+For learning the individual components or custom scenarios:
 
-# 3. Phase 1: Normal operation (legitimate server)
-echo "Testing with legitimate server..."
-docker-compose run --rm client
+1. **Start the legitimate server**
+   ```bash
+   docker-compose up --build legit-server
+   ```
 
-# 4. Phase 2: DNS compromise attack  
-echo "Testing with DNS compromise..."
-docker-compose run --rm client-compromised
+2. **Setup DNS resolution (Run as Administrator)**
+   ```bash
+   # On Linux/macOS
+   sudo ./add_hosts_entry.sh
+   
+   # On Windows (Run as Administrator)
+   ./add_hosts_entry.sh
+   ```
+   This maps `math-calculator.local` to the legitimate server IP.
 
-# 5. View comprehensive attack results
-echo "=== Attack Summary ==="
-cat results/attack_summary.json
+3. **Start the chatbot client**
+   ```bash
+   docker-compose up --build chatbot-client
+   ```
 
-echo "=== Exfiltrated Data ==="
-cat results/exfiltrated_data.json
+4. **Interact with legitimate server**
+   - Open browser to `http://localhost:8501`
+   - Use the chatbot interface to perform calculations
+   - Observe normal, legitimate behavior
+   - Note: All interactions go to the legitimate server
 
-echo "=== Reconnaissance Data ==="
-cat results/reconnaissance_data.json
+### Phase 1: Legitimate Operation
 
-# 6. Cleanup
-docker-compose down -v
-```
+5. **Start the malicious server**
+   ```bash
+   docker-compose up --build malicious-server
+   ```
+
+6. **Execute DNS hijacking attack (Run as Administrator)**
+   ```bash
+   # On Linux/macOS
+   sudo ./attack.sh swap_urls
+   
+   # On Windows (Run as Administrator)
+   ./attack.sh swap_urls
+   ```
+   This redirects `math-calculator.local` to the malicious server.
+
+7. **Continue using chatbot (User unaware)**
+   - **No restart required** - continue using the same browser session
+   - Perform calculations through the same chat interface
+   - **User experience remains identical**
+   - **Attack is completely transparent**
+
+8. **Verify successful attack**
+   ```bash
+   # Check exfiltrated data
+   cat results/exfiltrated_data.json
+   
+   # Check reconnaissance data
+   cat results/reconnaissance_data.json
+   
+   # Check attack summary
+   cat results/attack_summary.json
+   ```
 
 ## 📊 **Expected Results**
 
-### Successful Attack Indicators
+### Attack Success Indicators
 
-1. **Client Behavior**: Identical in both phases
-   ```
-   🔵 CLIENT: Connecting to trusted math-service server
-   📋 CLIENT: Available tools: ['add', 'multiply']
-   🧮 CLIENT: Calling add tool with sensitive financial data
-   📤 CLIENT: Received result: 55.0
-   ```
+1. **Transparent User Experience**
+   - Chatbot interface remains identical in both phases
+   - No visible changes in functionality or responses
+   - User continues normal workflow without interruption
 
-2. **Comprehensive Data Exfiltration**: 
-   - `results/exfiltrated_data.json` - Tool interactions and arguments
-   - `results/reconnaissance_data.json` - System fingerprinting data
-   - `results/attack_summary.json` - Attack analysis and metadata
-
-3. **Transparent Operation**: Client receives expected results
+2. **Successful Data Exfiltration**
    ```json
    {
-     "tool_name": "add",
-     "tool_arguments": {"a": 42, "b": 13},
-     "result": "[MALICIOUS] Sum: 55.0",
-     "client_detected_attack": false
+     "timestamp": "2024-01-15T10:30:45Z",
+     "user_request": "Calculate 150 * 25 for my financial projection",
+     "mcp_tool": "multiply",
+     "arguments": {"a": 150, "b": 25},
+     "result": 3750,
+     "user_context": "financial projection",
+     "client_ip": "172.18.0.3",
+     "attack_phase": "malicious_server"
    }
    ```
 
-### Attack Success Criteria
-- ✅ Client uses identical connection logic in both phases
-- ✅ Client has no knowledge of server legitimacy  
-- ✅ Attack is completely transparent to the client
-- ✅ Sensitive data is successfully exfiltrated
-- ✅ Server impersonation is undetectable
-- ✅ Comprehensive system reconnaissance completed
+3. **System Reconnaissance**
+   - Client system information
+   - Network topology mapping
+   - MCP protocol version detection
+   - Usage pattern analysis
 
-## 🔐 **Defense Recommendations**
+4. **Complete Invisibility**
+   - No error messages or warnings
+   - Identical response times
+   - Same functional behavior
+   - No UI changes or disruptions
 
-### Immediate Mitigations
-1. **Server Certificate Validation**
-   - Implement TLS certificate pinning
-   - Verify server identity cryptographically
-   - Use Certificate Transparency logs
-
-2. **Mutual TLS Authentication**
-   - Require client certificates
-   - Implement bidirectional authentication
-   - Use short-lived certificates
-
-3. **Server Identity Verification**
-   - Use cryptographic server signatures
-   - Implement challenge-response authentication
-   - Verify server capabilities and behavior patterns
-
-4. **Network Security**
-   - Secure DNS resolution (DNS over HTTPS/TLS)
-   - Implement DNS filtering and monitoring
-   - Use network segmentation and firewalls
-   - Monitor for unexpected server behaviors
-
-### Long-term Solutions
-1. **Protocol Enhancement**
-   - Add mandatory server authentication to MCP specification
-   - Implement server identity verification mechanisms
-   - Add protocol-level encryption and integrity checks
-
-2. **Client Hardening**
-   - Implement server allowlisting with cryptographic verification
-   - Add anomaly detection for server responses
-   - Use runtime application self-protection (RASP)
-
-3. **Infrastructure Security**
-   - Secure DNS infrastructure with DNSSEC
-   - Implement comprehensive network monitoring
-   - Regular security audits and penetration testing
-   - Zero-trust network architecture
-
-## ⚠️ **Important Disclaimers**
-
-### Legal and Ethical Use
-- **Research Purpose Only**: This PoC is for security research and education
-- **Authorized Testing**: Only use in controlled environments you own
-- **No Malicious Use**: Do not use against systems without explicit permission
-- **Educational Value**: Designed to improve MCP security understanding
-- **Responsible Disclosure**: Report vulnerabilities through proper channels
-
-### Technical Limitations
-- **Simulated Environment**: Uses Docker containers, not real DNS compromise
-- **Controlled Scenario**: Simplified for demonstration purposes
-- **No Real Harm**: No actual systems or data are compromised
-- **Research Context**: Not intended for production use
-
-## 🔧 **Technical Details**
+## 🔧 **Technical Implementation Details**
 
 ### File Structure
 ```
@@ -207,86 +248,162 @@ mcp_attack_poc/
 ├── .gitignore                   # Git ignore rules
 ├── example.env                  # Configuration template
 ├── docker-compose.yml           # Container orchestration
-├── run_demo.sh                  # Automated demo script
+├── add_hosts_entry.sh           # Initial DNS setup script
+├── attack.sh                    # DNS hijacking attack script
 ├── legit_server/
 │   ├── Dockerfile              # Legitimate server container
-│   ├── server.py               # Legitimate MCP server implementation
-│   └── requirements.txt        # Python dependencies
+│   ├── server.py               # Legitimate MCP server
+│   └── requirements.txt        # Dependencies
 ├── malicious_server/
 │   ├── Dockerfile              # Malicious server container
 │   ├── server.py               # Malicious MCP server (impersonation)
-│   └── requirements.txt        # Python dependencies
+│   └── requirements.txt        # Dependencies
 ├── client/
 │   ├── Dockerfile              # Client container
-│   ├── client.py               # MCP client implementation
-│   └── requirements.txt        # Python dependencies
-└── results/                    # Attack results (git-ignored)
-    ├── exfiltrated_data.json   # Intercepted tool interactions
-    ├── reconnaissance_data.json # System fingerprinting data
-    ├── attack_summary.json     # Attack analysis
-    └── client_log.txt          # Client interaction log
+│   ├── client.py               # Streamlit chatbot interface
+│   └── requirements.txt        # Dependencies
+└── results/                    # Attack results (created during attack)
+    ├── exfiltrated_data.json   # Intercepted interactions
+    ├── reconnaissance_data.json # System fingerprinting
+    └── attack_summary.json     # Attack analysis
 ```
 
-### Key Attack Vectors
-1. **DNS Poisoning**: Redirect DNS queries to malicious servers
-2. **BGP Hijacking**: Redirect network traffic at ISP level
-3. **ARP Spoofing**: Local network redirection attacks
-4. **Compromised Infrastructure**: Malicious updates to DNS servers
-5. **Supply Chain Attacks**: Compromised MCP server distributions
+### Key Attack Components
 
-### Detection Challenges
-- **Protocol Compliance**: Malicious server follows MCP protocol exactly
-- **Functional Facade**: Returns expected results to avoid suspicion
-- **Transparent Operation**: No visible differences in client behavior
-- **Timing Attacks**: Minimal latency differences
-- **Behavioral Mimicry**: Matches legitimate server response patterns
+1. **DNS Resolution Manipulation**
+   - `add_hosts_entry.sh`: Maps `math-calculator.local` to legitimate server
+   - `attack.sh`: Redirects DNS to malicious server
+   - Cross-platform compatibility (Windows/Linux/macOS)
 
-## 🛡️ **Security Implications**
+2. **Perfect Server Impersonation**
+   - Identical MCP protocol implementation
+   - Same tool names and functionality
+   - Matching response formats and timing
 
-### For MCP Implementers
-- Consider mandatory server authentication in protocol design
-- Implement cryptographic server identity verification
-- Add client-side server validation mechanisms
-- Design with zero-trust principles
+3. **Transparent Data Exfiltration**
+   - Logs all user interactions
+   - Captures sensitive calculation data
+   - Records system reconnaissance data
+   - Maintains complete operation facade
 
-### For Enterprise Users
-- Secure DNS infrastructure is critical for MCP deployments
-- Implement comprehensive network monitoring
-- Consider certificate pinning for critical MCP services
-- Regular security assessments of MCP implementations
+## 🛡️ **Defense Recommendations**
 
-### For Security Researchers
-- This attack vector applies to many client-server protocols
-- DNS security is fundamental for protocol security
-- Trust models need cryptographic backing
-- Protocol specifications should include security requirements
+### Immediate Mitigations
 
-## 📈 **Performance Considerations**
+1. **Certificate Pinning**
+   - Pin expected server certificates
+   - Validate certificate chains
+   - Implement certificate transparency monitoring
 
-### Resource Requirements
-- **Memory**: ~500MB per container
-- **CPU**: Minimal (demonstration purposes)
-- **Network**: Local Docker networking only
-- **Storage**: <100MB for all components
+2. **Server Authentication**
+   - Use cryptographic server identity verification
+   - Implement challenge-response authentication
+   - Require mutual TLS authentication
 
-### Scalability Notes
-- Can be extended to simulate multiple clients
-- Supports concurrent attack scenarios
-- Modular design allows component replacement
+3. **Network Security**
+   - Secure DNS resolution (DNS over HTTPS/TLS)
+   - Implement DNS filtering and monitoring
+   - Use network segmentation
+   - Monitor for unexpected hostname resolutions
+
+4. **Client-Side Validation**
+   - Verify server capabilities and responses
+   - Implement anomaly detection
+   - Add server reputation checking
+   - Use allowlisting with cryptographic verification
+
+### Long-term Protocol Enhancements
+
+1. **MCP Protocol Security**
+   - Add mandatory server authentication
+   - Implement protocol-level encryption
+   - Add integrity verification mechanisms
+   - Include server identity in protocol specification
+
+2. **Client Security Framework**
+   - Built-in server validation
+   - Automatic certificate verification
+   - Anomaly detection for server behavior
+   - Secure configuration management
+
+## ⚠️ **Security Implications**
+
+### For MCP Ecosystem
+- **Trust Model Weakness**: Current protocol relies on network-level trust
+- **Protocol Gap**: No built-in server authentication mechanism
+- **Client Vulnerability**: Clients cannot verify server legitimacy
+- **Ecosystem Risk**: Widespread vulnerability across MCP implementations
+
+### For Enterprise Deployment
+- **DNS Security Critical**: Secure DNS infrastructure is essential
+- **Network Monitoring**: Required for detecting DNS hijacking
+- **Certificate Management**: Proper PKI deployment necessary
+- **Incident Response**: Need procedures for detecting server impersonation
+
+### Real-World Attack Scenarios
+1. **Compromised DNS Servers**: ISP or enterprise DNS compromise
+2. **BGP Hijacking**: Network-level traffic redirection
+3. **DNS Poisoning**: Cache poisoning attacks
+4. **Supply Chain**: Malicious MCP server distributions
+5. **Insider Threats**: Internal DNS/network access abuse
 
 ## 🧪 **Testing and Validation**
 
 ### Test Scenarios
-1. **Basic Impersonation**: Verify server substitution works
-2. **Data Exfiltration**: Confirm sensitive data capture
-3. **Transparency**: Validate client remains unaware
-4. **Persistence**: Test attack across multiple sessions
+1. **Basic Functionality**: Verify both servers work identically
+2. **DNS Redirection**: Confirm hosts file manipulation works
+3. **Transparent Operation**: Validate user cannot detect switch
+4. **Data Exfiltration**: Verify comprehensive data capture
+5. **Cross-Platform**: Test on Windows, Linux, macOS
 
 ### Success Metrics
-- Client behavior consistency: 100%
-- Data exfiltration success: 100%
-- Attack transparency: 100%
-- System reconnaissance: Comprehensive
+- **User Experience**: 100% identical across phases
+- **Data Capture**: Complete interaction logging
+- **Attack Stealth**: Zero detection by user/client
+- **System Recon**: Comprehensive fingerprinting
+- **Persistence**: Attack survives client sessions
+
+## 🔍 **Advanced Attack Variations**
+
+### Network-Level Attacks
+- **ARP Spoofing**: Local network redirection
+- **DHCP Manipulation**: DNS server poisoning
+- **BGP Hijacking**: ISP-level traffic redirection
+- **DNS Cache Poisoning**: Upstream DNS compromise
+
+### Application-Level Attacks
+- **Supply Chain**: Malicious MCP server updates
+- **Configuration Attacks**: Modified client configurations
+- **Library Substitution**: Compromised MCP libraries
+- **Man-in-the-Middle**: TLS interception with fake certificates
+
+## 📈 **Performance Analysis**
+
+### Resource Requirements
+- **Legitimate Server**: ~100MB RAM, minimal CPU
+- **Malicious Server**: ~150MB RAM (includes logging)
+- **Client**: ~200MB RAM (Streamlit interface)
+- **Network**: Local Docker networking only
+
+### Attack Latency
+- **DNS Resolution**: <1ms additional overhead
+- **Server Response**: Identical to legitimate server
+- **Data Logging**: Asynchronous, no user impact
+- **Total Overhead**: Undetectable by user
+
+## 🔬 **Research Applications**
+
+### Security Research
+- DNS hijacking impact assessment
+- Protocol vulnerability analysis
+- Client trust model evaluation
+- Defense mechanism testing
+
+### Educational Use
+- Cybersecurity training scenarios
+- Protocol security demonstrations
+- Network security education
+- Incident response training
 
 ## 📚 **References and Resources**
 
@@ -296,46 +413,92 @@ mcp_attack_poc/
 
 ### Security Standards
 - [DNS Security Extensions (DNSSEC)](https://www.cloudflare.com/dns/dnssec/)
-- [Transport Layer Security (TLS)](https://tools.ietf.org/html/rfc8446)
-- [Certificate Pinning Best Practices](https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning)
+- [Certificate Pinning OWASP](https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning)
+- [DNS over HTTPS (DoH)](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/)
 
 ### Attack Research
-- [DNS Poisoning Attacks](https://www.cloudflare.com/learning/dns/dns-poisoning/)
-- [BGP Hijacking](https://www.cloudflare.com/learning/security/glossary/bgp-hijacking/)
-- [Supply Chain Security](https://www.cisa.gov/supply-chain-security)
+- [DNS Hijacking Techniques](https://www.cloudflare.com/learning/dns/dns-hijacking/)
+- [BGP Hijacking Analysis](https://www.cloudflare.com/learning/security/glossary/bgp-hijacking/)
+- [Hosts File Attacks](https://attack.mitre.org/techniques/T1565/001/)
 
-### Defensive Measures
-- [Zero Trust Architecture](https://www.nist.gov/publications/zero-trust-architecture)
-- [Network Security Monitoring](https://www.sans.org/white-papers/34302/)
-- [Certificate Transparency](https://certificate.transparency.dev/)
+## ❓ **Troubleshooting**
+
+### Common Issues
+
+1. **Permission Denied (Hosts File)**
+   ```bash
+   # Linux/macOS
+   sudo ./add_hosts_entry.sh
+   sudo ./attack.sh swap_urls
+   
+   # Windows
+   # Run Command Prompt as Administrator
+   ```
+
+2. **Docker Port Conflicts**
+   ```bash
+   # Check for port conflicts
+   docker ps
+   netstat -tulpn | grep :8501
+   ```
+
+3. **DNS Resolution Issues**
+   ```bash
+   # Verify hosts file entry
+   cat /etc/hosts | grep math-calculator.local
+   
+   # Test DNS resolution
+   nslookup math-calculator.local
+   ```
+
+4. **Container Communication**
+   ```bash
+   # Check Docker network
+   docker network ls
+   docker network inspect mcp_attack_poc_default
+   ```
 
 ## 🤝 **Contributing**
 
 ### Research Contributions
-- Additional attack vectors
+- Additional attack vectors and scenarios
 - Defense mechanism implementations
-- Protocol security enhancements
-- Documentation improvements
+- Cross-platform compatibility improvements
+- Performance optimization
 
-### Code Contributions
-- Performance optimizations
-- Additional reconnaissance techniques
-- Extended client scenarios
-- Improved logging and analysis
+### Security Enhancements
+- Protocol-level security additions
+- Client-side validation mechanisms
+- Network monitoring tools
+- Incident response procedures
 
-## 📞 **Support and Contact**
+## 📞 **Support**
 
 For questions about this security research:
-- Review the documentation thoroughly
-- Check existing issues and discussions
+- Review documentation thoroughly
+- Test in controlled environments only
 - Follow responsible disclosure practices
 - Contribute improvements via pull requests
+
+## ⚖️ **Legal and Ethical Disclaimers**
+
+### Authorized Use Only
+- **Educational Purpose**: For security research and education only
+- **Controlled Environment**: Only use in systems you own or have explicit permission to test
+- **No Malicious Intent**: Do not use against unauthorized systems
+- **Responsible Disclosure**: Report vulnerabilities through proper channels
+
+### Technical Scope
+- **Proof of Concept**: Simplified for demonstration purposes
+- **No Real Harm**: No actual systems compromised
+- **Controlled Simulation**: Uses Docker containers and local hosts file
+- **Research Context**: Not intended for production attacks
 
 ---
 
 **Created for security research and education purposes**  
-*Please use responsibly and only in authorized environments*
+*Use responsibly and only in authorized environments*
 
-**Version**: 2.0  
-**Last Updated**: 2024  
+**Version**: 3.0  
+**Last Updated**: January 2025  
 **License**: Educational/Research Use Only
